@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>POS – Ruta de Venta (PC)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --azul:#00416A;--resalte:#0c6cbd;--ok:#1e8e3e;--card:#fff;--shadow:0 4px 18px rgba(0,0,0,.15);
+    }
+    body{
+      margin:0;font-family:'Poppins',sans-serif;background:#f3f4f6;color:#111;
+      display:flex;flex-direction:column;height:100vh;
+    }
+    header{
+      background:var(--azul);color:#fff;display:flex;align-items:center;justify-content:space-between;
+      padding:10px 20px;font-weight:600;font-size:20px;
+    }
+    header img{height:60px}
+    main{flex:1;display:grid;grid-template-columns:320px 1fr;gap:20px;padding:20px;max-width:1600px;margin:auto;width:100%}
+    .panel{
+      background:var(--card);border-radius:10px;box-shadow:var(--shadow);
+      padding:16px;display:flex;flex-direction:column;gap:14px;
+    }
+    .panel h3{margin:0;color:var(--azul)}
+    label{font-weight:600;font-size:13px;color:#333}
+    input,select,textarea{
+      padding:10px;border:1px solid #ccc;border-radius:8px;font-size:14px;width:100%;
+    }
+    button{
+      background:var(--resalte);color:#fff;border:none;padding:10px 14px;border-radius:10px;
+      font-weight:600;cursor:pointer;
+    }
+    button:hover{background:#0a58a3}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    thead{background:var(--azul);color:#fff;position:sticky;top:0}
+    th,td{padding:8px;text-align:left;border-bottom:1px solid #ddd}
+    tbody tr:hover{background:#f2f6fa}
+    .totales{margin-top:auto;padding-top:10px;border-top:2px solid #ddd;font-size:16px}
+    .totales div{display:flex;justify-content:space-between;padding:4px 0}
+    .totales .total{font-weight:700;font-size:18px;color:var(--resalte)}
+  </style>
+</head>
+<body>
+<header>
+  <div>🖥️ POS – Ruta de Venta (PC)</div>
+  <img src="logo_proveedora.webp" alt="Logo">
+</header>
+
+<main>
+  <section class="panel" id="panel-izq">
+    <h3>Datos de Venta</h3>
+    <label>Cliente</label>
+    <input id="cliente" type="text" placeholder="PÚBLICO EN GENERAL" readonly>
+
+    <label>Buscar producto</label>
+    <input id="buscador" type="text" placeholder="Código o descripción...">
+
+    <label>Cantidad</label>
+    <input id="cantidad" type="number" min="0.01" step="0.01" value="1">
+
+    <button id="btnAgregar">Agregar</button>
+
+    <div style="margin-top:auto;">
+      <button id="btnCobrar" style="width:100%;font-size:18px;">Cobrar</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-der">
+    <h3>Carrito Actual</h3>
+    <div style="overflow:auto;max-height:55vh;">
+      <table>
+        <thead><tr><th>Producto</th><th>Cant</th><th>Importe</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="totales">
+      <div><span>Subtotal</span><span id="lblSubtotal">$0.00</span></div>
+      <div><span>Impuestos</span><span id="lblImpuestos">$0.00</span></div>
+      <div class="total"><span>Total</span><span id="lblTotal">$0.00</span></div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig={apiKey:"AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",authDomain:"inventariopv-643f1.firebaseapp.com",projectId:"inventariopv-643f1"};
+const app=initializeApp(firebaseConfig);const db=getFirestore(app);
+
+const elBusc=document.getElementById("buscador");
+const elCant=document.getElementById("cantidad");
+const tbody=document.getElementById("tbody");
+const lblSubtotal=document.getElementById("lblSubtotal");
+const lblImpuestos=document.getElementById("lblImpuestos");
+const lblTotal=document.getElementById("lblTotal");
+let catalogo=[],carrito=[];
+const money=n=>'$'+(Number(n)||0).toFixed(2);
+
+async function cargarCatalogo(){
+  const q=query(collection(db,"productos"),where("activo","==",true));
+  const snap=await getDocs(q);
+  catalogo=[];
+  snap.forEach(d=>{
+    const x=d.data();
+    catalogo.push({
+      id:d.id,nombre:x.concepto||"SIN NOMBRE",
+      codigo:x.codigoBarra||"",precio:Number(x.precioPublico||0)
+    });
+  });
+  console.log("Catálogo PC:",catalogo.length);
+}
+await cargarCatalogo();
+
+function buscarLocal(txt){
+  txt=txt.toLowerCase();
+  return catalogo.filter(p=>p.nombre.toLowerCase().includes(txt)||p.codigo.includes(txt));
+}
+function render(){
+  tbody.innerHTML="";
+  let subtotal=0;
+  carrito.forEach(it=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${it.nombre}</td><td>${it.cantidad}</td><td>${money(it.importe)}</td><td><button data-id="${it.id}">X</button></td>`;
+    tbody.appendChild(tr);
+    subtotal+=it.importe;
+  });
+  const impuestos=subtotal*0.16,total=subtotal+impuestos;
+  lblSubtotal.textContent=money(subtotal);
+  lblImpuestos.textContent=money(impuestos);
+  lblTotal.textContent=money(total);
+}
+document.getElementById("btnAgregar").onclick=()=>{
+  const q=elBusc.value.trim();
+  if(!q)return;
+  const hit=buscarLocal(q)[0];
+  if(!hit)return alert("No encontrado");
+  const cant=Number(elCant.value)||1;
+  const imp=cant*hit.precio;
+  carrito.push({id:hit.id,nombre:hit.nombre,cantidad:cant,importe:imp});
+  render();
+  elBusc.value="";elCant.value="1";elBusc.focus();
+};
+tbody.addEventListener("click",e=>{
+  if(e.target.tagName==="BUTTON"){
+    carrito=carrito.filter(x=>x.id!==e.target.dataset.id);
+    render();
+  }
+});
+</script>
+</body>
+</html>
