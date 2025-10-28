@@ -136,15 +136,21 @@
       font-weight: 700;
       color: var(--resalte);
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: #999;
-    }
-    .empty img { width: 200px; opacity: 0.3; }
+.empty img {
+  width: 280px;       /* tamaño más grande */
+  max-width: 80%;
+  opacity: 0.25;
+  display: block;
+  margin: 0 auto 10px auto;
+}
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
   </style>
 </head>
 <body>
