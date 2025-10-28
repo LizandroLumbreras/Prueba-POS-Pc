@@ -463,7 +463,7 @@ function render() {
 
   carrito.forEach(it => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${it.nombre}</td><td>${it.cantidad}</td><td>${money(it.importe)}</td>`;
+    tr.innerHTML = `<td><b>${it.codigo}</b><br>${it.nombre}</td><td>${it.cantidad}</td><td>${money(it.importe)}</td>`;
     tbody.appendChild(tr);
   });
 
