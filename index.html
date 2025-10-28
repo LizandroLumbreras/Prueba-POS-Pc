@@ -444,7 +444,7 @@ function buscarProd(q) {
     p.nombre.toLowerCase().includes(q)
   );
 }
-folioActual = (() => {
+let folioActual = (() => {
   const fecha = new Date().toISOString().slice(0,10).replace(/-/g,"");
   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `PDD-${fecha}-${rand}`;
