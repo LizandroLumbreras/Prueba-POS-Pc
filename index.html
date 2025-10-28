@@ -204,12 +204,18 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
   authDomain: "inventariopv-643f1.firebaseapp.com",
-  projectId: "inventariopv-643f1"
+  projectId: "inventariopv-643f1",
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -225,29 +231,39 @@ const estadoVacio = document.getElementById("estadoVacio");
 let catalogo = [];
 let carrito = [];
 
-const money = n => '$' + (Number(n) || 0).toFixed(2);
+const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 
+// --- CARGAR PRODUCTOS DESDE FIRESTORE ---
 async function cargarCatalogo() {
   const q = query(collection(db, "productos"), where("activo", "==", true));
   const snap = await getDocs(q);
   catalogo = [];
-  snap.forEach(d => {
+  snap.forEach((d) => {
     const x = d.data();
     catalogo.push({
       id: d.id,
       nombre: x.concepto || "SIN NOMBRE",
       codigo: (x.codigoBarra || "").toString(),
-      precio: Number(x.precioPublico || 0)
+      precio: Number(x.precioPublico || 0),
+      codigosEquivalentes: x.codigosEquivalentes || [],
     });
   });
   console.log("📦 Productos cargados:", catalogo.length);
 }
 await cargarCatalogo();
 
+// --- BUSCAR PRODUCTO ---
 function buscarProd(q) {
   q = q.toLowerCase();
-  return catalogo.find(p => p.codigo === q || p.nombre.toLowerCase().includes(q));
+  return catalogo.find(
+    (p) =>
+      p.codigo === q ||
+      (p.codigosEquivalentes && p.codigosEquivalentes.includes(q)) ||
+      p.nombre.toLowerCase().includes(q)
+  );
 }
+
+// --- ACTUALIZAR TABLA ---
 function render() {
   tbody.innerHTML = "";
   if (carrito.length === 0) {
@@ -259,9 +275,11 @@ function render() {
   estadoVacio.style.display = "none";
   tablaVenta.style.display = "table";
   let subtotal = 0;
-  carrito.forEach(it => {
+  carrito.forEach((it) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${it.nombre}</td><td>${it.cantidad}</td><td>${money(it.importe)}</td>`;
+    tr.innerHTML = `<td>${it.nombre}</td><td>${it.cantidad}</td><td>${money(
+      it.importe
+    )}</td>`;
     tbody.appendChild(tr);
     subtotal += it.importe;
   });
@@ -271,19 +289,33 @@ function render() {
   lblIVA.textContent = money(iva);
   lblTotal.textContent = money(total);
 }
-buscador.addEventListener("keydown", e => {
+
+// --- ESCUCHAR ENTER Y AGREGAR PRODUCTO ---
+buscador.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     const val = buscador.value.trim();
+    if (!val) return;
     const prod = buscarProd(val);
-    if (!prod) return alert("No encontrado");
-    const ex = carrito.find(x => x.id === prod.id);
-    if (ex) ex.cantidad += 1;
-    else carrito.push({ ...prod, cantidad: 1, importe: prod.precio });
+    if (!prod) {
+      alert("Producto no encontrado");
+      buscador.value = "";
+      return;
+    }
+    const ex = carrito.find((x) => x.id === prod.id);
+    if (ex) {
+      ex.cantidad += 1;
+      ex.importe = ex.cantidad * prod.precio;
+    } else {
+      carrito.push({ ...prod, cantidad: 1, importe: prod.precio });
+    }
     buscador.value = "";
     render();
   }
 });
-document.getElementById("fecha").textContent = new Date().toLocaleDateString("es-MX");
+
+// --- FECHA ---
+document.getElementById("fecha").textContent =
+  new Date().toLocaleDateString("es-MX");
 </script>
 </body>
 </html>
