@@ -565,17 +565,57 @@ btnConfirmarCobro.addEventListener("click", async () => {
     })),
   };
 
-  try {
-    await addDoc(collection(db, "ventas"), venta);
-    alert(`✅ Venta registrada correctamente.\nFolio: ${folio}`);
-    document.getElementById("folio").textContent = folio;
-    modalCobro.style.display = "none";
-    carrito = [];
-    render();
-  } catch (e) {
-    console.error(e);
-    alert("Error al registrar el cobro.");
-  }
+ try {
+  await addDoc(collection(db, "ventas"), venta);
+  alert(`✅ Venta registrada correctamente.\nFolio: ${folio}`);
+  document.getElementById("folio").textContent = folio;
+
+  // === IMPRIMIR TICKET ===
+  const logoURL = "logo_proveedora.webp";
+  const contenidoTicket = `
+  <div style="text-align:center;font-family:monospace;">
+    <img src="${logoURL}" style="width:120px;margin-bottom:8px;"><br>
+    <strong>LA PROVEEDORA PDD</strong><br>
+    ----------------------------------------<br>
+    FOLIO: ${folio}<br>
+    FECHA: ${new Date().toLocaleString("es-MX")}<br>
+    USUARIO: ${document.getElementById("usuario").textContent}<br>
+    ----------------------------------------<br>
+    ${carrito.map(x =>
+      `${x.codigo} | ${x.nombre}<br>${x.cantidad} x $${x.precio.toFixed(2)} = $${x.importe.toFixed(2)}`
+    ).join("<br>")}
+    <br>----------------------------------------<br>
+    SUBTOTAL: ${lblSubtotal.textContent}<br>
+    IVA: ${lblIVA.textContent}<br>
+    <strong>TOTAL: ${lblTotal.textContent}</strong><br>
+    ----------------------------------------<br>
+    MÉTODO: ${metodoPago.value.toUpperCase()}<br>
+    RECIBIDO: $${(metodoPago.value === "efectivo" ? recibido : total).toFixed(2)}<br>
+    CAMBIO: $${(metodoPago.value === "efectivo" ? (recibido - total) : 0).toFixed(2)}<br>
+    ----------------------------------------<br>
+    <strong>SI REQUIERE FACTURA, SOLICÍTELA AL MOMENTO DE SU COMPRA</strong><br>
+    ----------------------------------------<br>
+    <strong>GRACIAS POR SU COMPRA</strong><br>
+  </div>
+  `;
+
+  const ventana = window.open("", "PRINT", "height=600,width=400");
+  ventana.document.write(`
+    <html><head><title>Ticket ${folio}</title></head>
+    <body onload="window.print(); window.close();">
+      ${contenidoTicket}
+    </body></html>
+  `);
+  ventana.document.close();
+
+  modalCobro.style.display = "none";
+  carrito = [];
+  render();
+
+} catch (e) {
+  console.error(e);
+  alert("Error al registrar el cobro.");
+}
 });
 
 
