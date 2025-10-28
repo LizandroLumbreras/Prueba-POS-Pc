@@ -458,7 +458,16 @@ btnConfirmarCobro.addEventListener("click", async () => {
     return;
   }
 
+  // Generar folio único
+  const generarFolio = () => {
+    const fecha = new Date().toISOString().slice(0,10).replace(/-/g,"");
+    const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `PDD-${fecha}-${rand}`;
+  };
+  const folio = generarFolio();
+
   const venta = {
+    folio,
     fecha: new Date().toISOString(),
     usuario: document.getElementById("usuario").textContent,
     metodoPago: metodoPago.value,
@@ -475,7 +484,8 @@ btnConfirmarCobro.addEventListener("click", async () => {
 
   try {
     await addDoc(collection(db, "ventas"), venta);
-    alert("✅ Cobro registrado correctamente.");
+    alert(`✅ Venta registrada correctamente.\nFolio: ${folio}`);
+    document.getElementById("folio").textContent = folio;
     modalCobro.style.display = "none";
     carrito = [];
     render();
@@ -484,6 +494,7 @@ btnConfirmarCobro.addEventListener("click", async () => {
     alert("Error al registrar el cobro.");
   }
 });
+
 
 // Cerrar modal con clic fuera o tecla ESC
 window.addEventListener("click", e => { if (e.target === modalCobro) modalCobro.style.display = "none"; });
