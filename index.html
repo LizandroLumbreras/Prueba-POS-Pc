@@ -151,6 +151,73 @@
   justify-content: center;
   text-align: center;
 }
+    .btn-cobrar {
+  background: var(--ok, #1e8e3e);
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px;
+  margin-top: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+}
+.btn-cobrar:hover { background: #15702c; }
+.modal-buscar {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.45);
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+.modal-contenido {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 20px;
+  width: 90%;
+  max-width: 650px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  border-top: 6px solid var(--resalte);
+}
+.modal-contenido h3 {
+  margin-top: 0;
+  text-align: center;
+  color: var(--azul);
+}
+.modal-contenido input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 15px;
+}
+.modal-contenido table thead {
+  background: var(--azul);
+  color: white;
+}
+.modal-contenido th, .modal-contenido td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ddd;
+}
+.modal-contenido tr:hover {
+  background: #e4efff;
+}
+.cerrar {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  margin-top: 10px;
+  cursor: pointer;
+}
   </style>
 </head>
 <body>
@@ -160,6 +227,7 @@
     <button id="btnCancelar">Cancelar Venta</button>
     <button id="btnDescuento">Descuento</button>
     <button id="btnSalida">Salidas de Efectivo</button>
+    <button id="btnBuscarProd" style="background:#ffc107;color:#111;font-weight:600;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;">🔎 Buscar Artículo</button>
   </nav>
   <div>💼 Punto de Venta PROVSOFT</div>
 </header>
@@ -199,9 +267,23 @@
       <div><span>I.V.A.</span><span id="lblIVA">$0.00</span></div>
       <div class="total"><span>Total</span><span id="lblTotal">$0.00</span></div>
     </div>
+    <button id="btnCobrar" class="btn-cobrar">💰 Cobrar</button>
   </aside>
 </main>
-
+    <!-- === MODAL FLOTANTE DE BÚSQUEDA === -->
+<div id="modalBuscar" class="modal-buscar">
+  <div class="modal-contenido">
+    <h3>Buscar artículo</h3>
+    <input id="inputBusquedaProd" type="text" placeholder="Escribe nombre o código..." />
+    <table id="tablaBusqueda">
+      <thead>
+        <tr><th>Código</th><th>Descripción</th><th>Costo</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button id="cerrarModal" class="cerrar">Cerrar</button>
+  </div>
+</div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -316,6 +398,93 @@ buscador.addEventListener("keydown", (e) => {
 // --- FECHA ---
 document.getElementById("fecha").textContent =
   new Date().toLocaleDateString("es-MX");
+  // --- BOTÓN COBRAR ---
+document.getElementById("btnCobrar").addEventListener("click", async () => {
+  if (carrito.length === 0) {
+    alert("No hay productos en la venta.");
+    return;
+  }
+
+  const venta = {
+    fecha: new Date().toISOString(),
+    usuario: document.getElementById("usuario").textContent,
+    total: carrito.reduce((a, b) => a + b.importe, 0) * 1.16,
+    items: carrito.map((x) => ({
+      producto: x.nombre,
+      cantidad: x.cantidad,
+      precio: x.precio,
+      importe: x.importe,
+    })),
+  };
+
+  try {
+    const { addDoc, collection } = await import(
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+    );
+    await addDoc(collection(db, "ventas"), venta);
+    alert("✅ Venta registrada correctamente.");
+
+    carrito = [];
+    render();
+  } catch (e) {
+    console.error(e);
+    alert("Error al registrar la venta.");
+  }
+});
+  // === MODAL DE BÚSQUEDA DE PRODUCTOS ===
+const modal = document.getElementById("modalBuscar");
+const inputBusquedaProd = document.getElementById("inputBusquedaProd");
+const tablaBusqueda = document.getElementById("tablaBusqueda").querySelector("tbody");
+const btnBuscarProd = document.getElementById("btnBuscarProd");
+const btnCerrarModal = document.getElementById("cerrarModal");
+
+btnBuscarProd.addEventListener("click", () => {
+  modal.style.display = "flex";
+  inputBusquedaProd.focus();
+  tablaBusqueda.innerHTML = "";
+});
+
+btnCerrarModal.addEventListener("click", () => {
+  modal.style.display = "none";
+});
+
+// Buscar en catálogo mientras se escribe
+inputBusquedaProd.addEventListener("input", () => {
+  const val = inputBusquedaProd.value.trim().toLowerCase();
+  tablaBusqueda.innerHTML = "";
+  if (!val) return;
+  const resultados = catalogo.filter(
+    (p) =>
+      p.nombre.toLowerCase().includes(val) ||
+      (p.codigo && p.codigo.toLowerCase().includes(val))
+  );
+  resultados.forEach((p) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.codigo}</td><td>${p.nombre}</td><td>$${p.precio.toFixed(2)}</td>`;
+    tr.addEventListener("click", () => {
+      const ex = carrito.find((x) => x.id === p.id);
+      if (ex) {
+        ex.cantidad += 1;
+        ex.importe = ex.cantidad * p.precio;
+      } else {
+        carrito.push({ ...p, cantidad: 1, importe: p.precio });
+      }
+      render();
+      modal.style.display = "none";
+      inputBusquedaProd.value = "";
+    });
+    tablaBusqueda.appendChild(tr);
+  });
+});
+
+// Cerrar modal si se hace clic fuera
+window.addEventListener("click", (e) => {
+  if (e.target === modal) modal.style.display = "none";
+});
+  // Cerrar modal con tecla ESC
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") modal.style.display = "none";
+});
 </script>
 </body>
 </html>
