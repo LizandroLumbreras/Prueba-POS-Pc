@@ -629,7 +629,8 @@ window.addEventListener("keydown", e => { if (e.key === "Escape") modal.style.di
 const btnLogout = document.getElementById("btnLogout");
 btnLogout.addEventListener("click", () => {
   localStorage.removeItem("usuarioPOS");
-  location.reload();
+  document.getElementById("pantallaPOS").style.display = "none";
+  document.getElementById("pantallaLogin").style.display = "flex";
 });
 </script>
 </body>
