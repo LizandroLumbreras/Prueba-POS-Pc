@@ -444,8 +444,13 @@ function buscarProd(q) {
     p.nombre.toLowerCase().includes(q)
   );
 }
-
-// === RENDERIZAR TABLA ===
+folioActual = (() => {
+  const fecha = new Date().toISOString().slice(0,10).replace(/-/g,"");
+  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `PDD-${fecha}-${rand}`;
+})();
+document.getElementById("folio").textContent = folioActual;
+  // === RENDERIZAR TABLA ===
 function render() {
   tbody.innerHTML = "";
   if (carrito.length === 0) {
@@ -541,7 +546,7 @@ btnConfirmarCobro.addEventListener("click", async () => {
     const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
     return `PDD-${fecha}-${rand}`;
   };
-  const folio = generarFolio();
+ const folio = folioActual;
 
   const venta = {
     folio,
