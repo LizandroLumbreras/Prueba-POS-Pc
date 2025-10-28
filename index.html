@@ -220,7 +220,33 @@
 }
   </style>
 </head>
-<body>
+  <body>
+  <!-- === LOGIN === -->
+  <div id="pantallaLogin"
+       style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+              height:100vh;background:linear-gradient(to right,#00416A,#E4E5E6);">
+    <div style="background:white;padding:30px 40px;border-radius:12px;
+                box-shadow:0 6px 18px rgba(0,0,0,.2);max-width:320px;width:90%;text-align:center;">
+      <img src="logo_proveedora.webp" style="max-width:140px;margin-bottom:12px;">
+      <h2 style="color:#00416A;margin:0 0 14px;">Iniciar Sesión</h2>
+      <input id="loginUsuario" placeholder="Usuario"
+             style="width:100%;padding:10px;margin-bottom:10px;border-radius:8px;border:1px solid #ccc;">
+      <input id="loginPassword" type="password" placeholder="Contraseña"
+             style="width:100%;padding:10px;margin-bottom:14px;border-radius:8px;border:1px solid #ccc;">
+      <button id="btnLogin"
+              style="background:#0c6cbd;color:white;border:none;padding:10px 14px;border-radius:8px;
+                     font-weight:600;cursor:pointer;width:100%;">Entrar</button>
+      <p id="loginMsg"
+         style="color:red;font-size:14px;margin-top:8px;display:none;">
+         Usuario o contraseña incorrectos
+      </p>
+    </div>
+  </div>
+
+  <!-- === PANTALLA POS === -->
+  <div id="pantallaPOS" style="display:none;">
+    <!-- aquí pega TODO tu contenido original del POS (desde <header> hasta antes de <script type="module">) -->
+  </div>
 <header>
   <nav>
     <button id="btnCorte">Corte de Caja</button>
@@ -230,6 +256,9 @@
     <button id="btnBuscarProd" style="background:#ffc107;color:#111;font-weight:600;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;">🔎 Buscar Artículo</button>
   </nav>
   <div>💼 Punto de Venta PROVSOFT</div>
+  <button id="btnLogout" style="background:#dc3545;color:#fff;border:none;padding:6px 12px;
+border-radius:8px;font-weight:600;cursor:pointer;">Cerrar sesión</button>
+
 </header>
 
 <main>
@@ -325,6 +354,58 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+  // === CONTROL DE SESIÓN ===
+const usuarioGuardado = localStorage.getItem("usuarioPOS");
+if (usuarioGuardado) {
+  document.getElementById("usuario").textContent = usuarioGuardado;
+  document.getElementById("pantallaLogin").style.display = "none";
+  document.getElementById("pantallaPOS").style.display = "block";
+}
+
+// === LOGIN FIRESTORE ===
+import { getDocs, query, collection, where } 
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const pantallaLogin = document.getElementById("pantallaLogin");
+const pantallaPOS = document.getElementById("pantallaPOS");
+const btnLogin = document.getElementById("btnLogin");
+const loginUsuario = document.getElementById("loginUsuario");
+const loginPassword = document.getElementById("loginPassword");
+const loginMsg = document.getElementById("loginMsg");
+
+btnLogin.addEventListener("click", async () => {
+  const user = loginUsuario.value.trim().toUpperCase();
+  const pass = loginPassword.value.trim();
+  if (!user || !pass) return;
+
+  // Buscar en colección usuarios_ruta
+  const q = query(
+    collection(db, "usuarios_ruta"),
+    where("usuario", "==", user),
+    where("activo", "==", true)
+  );
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    loginMsg.style.display = "block";
+    loginMsg.textContent = "Usuario no encontrado.";
+    return;
+  }
+
+  const data = snap.docs[0].data();
+  if (data.password !== pass) {
+    loginMsg.style.display = "block";
+    loginMsg.textContent = "Contraseña incorrecta.";
+    return;
+  }
+
+  // Si coincide
+  localStorage.setItem("usuarioPOS", data.usuario);
+  document.getElementById("usuario").textContent = data.usuario;
+  pantallaLogin.style.display = "none";
+  pantallaPOS.style.display = "block";
+});
+
 
 // === ELEMENTOS BÁSICOS ===
 const buscador = document.getElementById("buscador");
@@ -542,6 +623,12 @@ inputBusquedaProd.addEventListener("input", () => {
 
 window.addEventListener("click", e => { if (e.target === modal) modal.style.display = "none"; });
 window.addEventListener("keydown", e => { if (e.key === "Escape") modal.style.display = "none"; });
+  // === CERRAR SESIÓN ===
+const btnLogout = document.getElementById("btnLogout");
+btnLogout.addEventListener("click", () => {
+  localStorage.removeItem("usuarioPOS");
+  location.reload();
+});
 </script>
 </body>
 </html>
