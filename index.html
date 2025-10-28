@@ -284,6 +284,29 @@
     <button id="cerrarModal" class="cerrar">Cerrar</button>
   </div>
 </div>
+  <!-- === MODAL DE COBRO === -->
+<div id="modalCobro" class="modal-buscar">
+  <div class="modal-contenido" style="max-width:480px">
+    <h3>Procesar pago</h3>
+    <label>Método de pago:</label>
+    <select id="metodoPago" style="width:100%;padding:10px;margin-bottom:10px;border-radius:8px;border:1px solid #ccc;">
+      <option value="efectivo">💵 Efectivo</option>
+      <option value="tarjeta">💳 Tarjeta</option>
+      <option value="mixto">💰 Mixto</option>
+    </select>
+
+    <div id="bloqueEfectivo">
+      <label>Monto recibido:</label>
+      <input id="montoRecibido" type="number" min="0" step="0.01" placeholder="0.00"
+        style="width:100%;padding:10px;margin-bottom:10px;border-radius:8px;border:1px solid #ccc;">
+      <div style="text-align:right;font-size:16px;font-weight:600;">Cambio: <span id="lblCambio">$0.00</span></div>
+    </div>
+
+    <button id="btnConfirmarCobro" style="background:#1e8e3e;color:white;border:none;border-radius:8px;padding:10px 14px;font-weight:600;margin-top:14px;width:100%;cursor:pointer;">Confirmar cobro</button>
+    <button id="cerrarCobro" class="cerrar">Cancelar</button>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -292,6 +315,7 @@ import {
   getDocs,
   query,
   where,
+  addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -302,6 +326,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// === ELEMENTOS BÁSICOS ===
 const buscador = document.getElementById("buscador");
 const tbody = document.getElementById("tbody");
 const lblSubtotal = document.getElementById("lblSubtotal");
@@ -313,39 +338,37 @@ const estadoVacio = document.getElementById("estadoVacio");
 let catalogo = [];
 let carrito = [];
 
-const money = (n) => "$" + (Number(n) || 0).toFixed(2);
+const money = n => "$" + (Number(n) || 0).toFixed(2);
 
-// --- CARGAR PRODUCTOS DESDE FIRESTORE ---
+// === CARGAR PRODUCTOS ===
 async function cargarCatalogo() {
   const q = query(collection(db, "productos"), where("activo", "==", true));
   const snap = await getDocs(q);
-  catalogo = [];
-  snap.forEach((d) => {
+  catalogo = snap.docs.map(d => {
     const x = d.data();
-    catalogo.push({
+    return {
       id: d.id,
       nombre: x.concepto || "SIN NOMBRE",
       codigo: (x.codigoBarra || "").toString(),
       precio: Number(x.precioPublico || 0),
-      codigosEquivalentes: x.codigosEquivalentes || [],
-    });
+      codigosEquivalentes: x.codigosEquivalentes || []
+    };
   });
   console.log("📦 Productos cargados:", catalogo.length);
 }
 await cargarCatalogo();
 
-// --- BUSCAR PRODUCTO ---
+// === BUSCAR PRODUCTO ===
 function buscarProd(q) {
   q = q.toLowerCase();
-  return catalogo.find(
-    (p) =>
-      p.codigo === q ||
-      (p.codigosEquivalentes && p.codigosEquivalentes.includes(q)) ||
-      p.nombre.toLowerCase().includes(q)
+  return catalogo.find(p =>
+    p.codigo === q ||
+    (p.codigosEquivalentes && p.codigosEquivalentes.includes(q)) ||
+    p.nombre.toLowerCase().includes(q)
   );
 }
 
-// --- ACTUALIZAR TABLA ---
+// === RENDERIZAR TABLA ===
 function render() {
   tbody.innerHTML = "";
   if (carrito.length === 0) {
@@ -356,24 +379,24 @@ function render() {
   }
   estadoVacio.style.display = "none";
   tablaVenta.style.display = "table";
-  let subtotal = 0;
-  carrito.forEach((it) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${it.nombre}</td><td>${it.cantidad}</td><td>${money(
-      it.importe
-    )}</td>`;
-    tbody.appendChild(tr);
-    subtotal += it.importe;
-  });
+
+  let subtotal = carrito.reduce((a, b) => a + b.importe, 0);
   const iva = subtotal * 0.16;
   const total = subtotal + iva;
+
+  carrito.forEach(it => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${it.nombre}</td><td>${it.cantidad}</td><td>${money(it.importe)}</td>`;
+    tbody.appendChild(tr);
+  });
+
   lblSubtotal.textContent = money(subtotal);
   lblIVA.textContent = money(iva);
   lblTotal.textContent = money(total);
 }
 
-// --- ESCUCHAR ENTER Y AGREGAR PRODUCTO ---
-buscador.addEventListener("keydown", (e) => {
+// === AÑADIR PRODUCTO DESDE BUSCADOR ===
+buscador.addEventListener("keydown", e => {
   if (e.key === "Enter") {
     const val = buscador.value.trim();
     if (!val) return;
@@ -383,7 +406,7 @@ buscador.addEventListener("keydown", (e) => {
       buscador.value = "";
       return;
     }
-    const ex = carrito.find((x) => x.id === prod.id);
+    const ex = carrito.find(x => x.id === prod.id);
     if (ex) {
       ex.cantidad += 1;
       ex.importe = ex.cantidad * prod.precio;
@@ -395,21 +418,54 @@ buscador.addEventListener("keydown", (e) => {
   }
 });
 
-// --- FECHA ---
-document.getElementById("fecha").textContent =
-  new Date().toLocaleDateString("es-MX");
-  // --- BOTÓN COBRAR ---
-document.getElementById("btnCobrar").addEventListener("click", async () => {
-  if (carrito.length === 0) {
-    alert("No hay productos en la venta.");
+// === FECHA ===
+document.getElementById("fecha").textContent = new Date().toLocaleDateString("es-MX");
+
+// === MODAL DE COBRO ===
+const modalCobro = document.getElementById("modalCobro");
+const metodoPago = document.getElementById("metodoPago");
+const montoRecibido = document.getElementById("montoRecibido");
+const lblCambio = document.getElementById("lblCambio");
+const btnConfirmarCobro = document.getElementById("btnConfirmarCobro");
+const btnCerrarCobro = document.getElementById("cerrarCobro");
+
+// Abrir modal al presionar Cobrar
+document.getElementById("btnCobrar").addEventListener("click", () => {
+  if (carrito.length === 0) return alert("No hay productos en la venta.");
+  modalCobro.style.display = "flex";
+  montoRecibido.value = "";
+  lblCambio.textContent = "$0.00";
+});
+
+// Cerrar modal
+btnCerrarCobro.addEventListener("click", () => modalCobro.style.display = "none");
+
+// Calcular cambio dinámico
+montoRecibido.addEventListener("input", () => {
+  const total = carrito.reduce((a, b) => a + b.importe, 0) * 1.16;
+  const recibido = parseFloat(montoRecibido.value) || 0;
+  const cambio = Math.max(0, recibido - total);
+  lblCambio.textContent = "$" + cambio.toFixed(2);
+});
+
+// Confirmar cobro
+btnConfirmarCobro.addEventListener("click", async () => {
+  const total = carrito.reduce((a, b) => a + b.importe, 0) * 1.16;
+  const recibido = parseFloat(montoRecibido.value) || 0;
+
+  if (metodoPago.value === "efectivo" && recibido < total) {
+    alert("El monto recibido es insuficiente.");
     return;
   }
 
   const venta = {
     fecha: new Date().toISOString(),
     usuario: document.getElementById("usuario").textContent,
-    total: carrito.reduce((a, b) => a + b.importe, 0) * 1.16,
-    items: carrito.map((x) => ({
+    metodoPago: metodoPago.value,
+    total,
+    montoRecibido: metodoPago.value === "efectivo" ? recibido : total,
+    cambio: metodoPago.value === "efectivo" ? (recibido - total) : 0,
+    items: carrito.map(x => ({
       producto: x.nombre,
       cantidad: x.cantidad,
       precio: x.precio,
@@ -418,20 +474,22 @@ document.getElementById("btnCobrar").addEventListener("click", async () => {
   };
 
   try {
-    const { addDoc, collection } = await import(
-      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
-    );
     await addDoc(collection(db, "ventas"), venta);
-    alert("✅ Venta registrada correctamente.");
-
+    alert("✅ Cobro registrado correctamente.");
+    modalCobro.style.display = "none";
     carrito = [];
     render();
   } catch (e) {
     console.error(e);
-    alert("Error al registrar la venta.");
+    alert("Error al registrar el cobro.");
   }
 });
-  // === MODAL DE BÚSQUEDA DE PRODUCTOS ===
+
+// Cerrar modal con clic fuera o tecla ESC
+window.addEventListener("click", e => { if (e.target === modalCobro) modalCobro.style.display = "none"; });
+window.addEventListener("keydown", e => { if (e.key === "Escape") modalCobro.style.display = "none"; });
+
+// === MODAL DE BÚSQUEDA ===
 const modal = document.getElementById("modalBuscar");
 const inputBusquedaProd = document.getElementById("inputBusquedaProd");
 const tablaBusqueda = document.getElementById("tablaBusqueda").querySelector("tbody");
@@ -444,25 +502,20 @@ btnBuscarProd.addEventListener("click", () => {
   tablaBusqueda.innerHTML = "";
 });
 
-btnCerrarModal.addEventListener("click", () => {
-  modal.style.display = "none";
-});
+btnCerrarModal.addEventListener("click", () => modal.style.display = "none");
 
-// Buscar en catálogo mientras se escribe
 inputBusquedaProd.addEventListener("input", () => {
   const val = inputBusquedaProd.value.trim().toLowerCase();
   tablaBusqueda.innerHTML = "";
   if (!val) return;
   const resultados = catalogo.filter(
-    (p) =>
-      p.nombre.toLowerCase().includes(val) ||
-      (p.codigo && p.codigo.toLowerCase().includes(val))
+    p => p.nombre.toLowerCase().includes(val) || (p.codigo && p.codigo.toLowerCase().includes(val))
   );
-  resultados.forEach((p) => {
+  resultados.forEach(p => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${p.codigo}</td><td>${p.nombre}</td><td>$${p.precio.toFixed(2)}</td>`;
     tr.addEventListener("click", () => {
-      const ex = carrito.find((x) => x.id === p.id);
+      const ex = carrito.find(x => x.id === p.id);
       if (ex) {
         ex.cantidad += 1;
         ex.importe = ex.cantidad * p.precio;
@@ -471,20 +524,13 @@ inputBusquedaProd.addEventListener("input", () => {
       }
       render();
       modal.style.display = "none";
-      inputBusquedaProd.value = "";
     });
     tablaBusqueda.appendChild(tr);
   });
 });
 
-// Cerrar modal si se hace clic fuera
-window.addEventListener("click", (e) => {
-  if (e.target === modal) modal.style.display = "none";
-});
-  // Cerrar modal con tecla ESC
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") modal.style.display = "none";
-});
+window.addEventListener("click", e => { if (e.target === modal) modal.style.display = "none"; });
+window.addEventListener("keydown", e => { if (e.key === "Escape") modal.style.display = "none"; });
 </script>
 </body>
 </html>
