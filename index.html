@@ -416,24 +416,42 @@ let catalogo = [];
 let carrito = [];
 
 const money = n => "$" + (Number(n) || 0).toFixed(2);
+let departamentos = {};
+
+async function cargarDepartamentos() {
+  const snap = await getDocs(collection(db, "departamentos_venta"));
+  snap.forEach(d => {
+    const x = d.data();
+    departamentos[d.id] = {
+      nombre: x.nombre || "SIN NOMBRE",
+      iva: Number(x.iva || 0),
+      ieps: Number(x.ieps || 0)
+    };
+  });
+  console.log("🏷 Departamentos cargados:", Object.keys(departamentos).length);
+}
 
 // === CARGAR PRODUCTOS ===
 async function cargarCatalogo() {
   const q = query(collection(db, "productos"), where("activo", "==", true));
   const snap = await getDocs(q);
-  catalogo = snap.docs.map(d => {
-    const x = d.data();
-    return {
-      id: d.id,
-      nombre: x.concepto || "SIN NOMBRE",
-      codigo: (x.codigoBarra || "").toString(),
-      precio: Number(x.precioPublico || 0),
-      codigosEquivalentes: x.codigosEquivalentes || []
-    };
-  });
+catalogo = snap.docs.map(d => {
+  const x = d.data();
+  const depto = departamentos[x.departamento_id] || { iva: 0, ieps: 0 };
+  return {
+    id: d.id,
+    nombre: x.concepto || "SIN NOMBRE",
+    codigo: (x.codigoBarra || "").toString(),
+    precio: Number(x.precioPublico || 0),
+    codigosEquivalentes: x.codigosEquivalentes || [],
+    iva: depto.iva,
+    ieps: depto.ieps
+  };
+});
   console.log("📦 Productos cargados:", catalogo.length);
 }
-await cargarCatalogo();
+await cargarDepartamentos(); // Cargar tasas primero
+await cargarCatalogo();       // Luego productos con tasas correctas
 
 // === BUSCAR PRODUCTO ===
 function buscarProd(q) {
@@ -463,20 +481,26 @@ function render() {
   estadoVacio.style.display = "none";
   tablaVenta.style.display = "table";
 
-  let subtotal = carrito.reduce((a, b) => a + b.importe, 0);
-  const iva = subtotal * 0.16;
-  const total = subtotal + iva;
+let subtotal = 0, ivaTotal = 0, total = 0;
 
-  carrito.forEach(it => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td><b>${it.codigo}</b><br>${it.nombre}</td><td>${it.cantidad}</td><td>${money(it.importe)}</td>`;
-    tbody.appendChild(tr);
-  });
+carrito.forEach(it => {
+  const precio = it.precio; // precio público
+  const ivaRate = it.iva || 0;
+  const iepsRate = it.ieps || 0;
 
-  lblSubtotal.textContent = money(subtotal);
-  lblIVA.textContent = money(iva);
-  lblTotal.textContent = money(total);
-}
+  const divisor = 1 + (iepsRate / 100) + (ivaRate / 100);
+  const base = precio / divisor;
+  const ivaMonto = base * (ivaRate / 100);
+  const iepsMonto = base * (iepsRate / 100);
+
+  subtotal += base * it.cantidad;
+  ivaTotal += ivaMonto * it.cantidad;
+  total += precio * it.cantidad;
+});
+
+lblSubtotal.textContent = money(subtotal);
+lblIVA.textContent = money(ivaTotal);
+lblTotal.textContent = money(total);
 
 // === AÑADIR PRODUCTO DESDE BUSCADOR ===
 buscador.addEventListener("keydown", e => {
@@ -570,43 +594,72 @@ btnConfirmarCobro.addEventListener("click", async () => {
   alert(`✅ Venta registrada correctamente.\nFolio: ${folio}`);
   document.getElementById("folio").textContent = folio;
 
-  // === IMPRIMIR TICKET ===
-  const logoURL = "logo_proveedora.webp";
-  const contenidoTicket = `
-  <div style="text-align:center;font-family:monospace;">
-    <img src="${logoURL}" style="width:120px;margin-bottom:8px;"><br>
-    <strong>LA PROVEEDORA PDD</strong><br>
-    ----------------------------------------<br>
-    FOLIO: ${folio}<br>
-    FECHA: ${new Date().toLocaleString("es-MX")}<br>
-    USUARIO: ${document.getElementById("usuario").textContent}<br>
-    ----------------------------------------<br>
-    ${carrito.map(x =>
-      `${x.codigo} | ${x.nombre}<br>${x.cantidad} x $${x.precio.toFixed(2)} = $${x.importe.toFixed(2)}`
-    ).join("<br>")}
-    <br>----------------------------------------<br>
-    SUBTOTAL: ${lblSubtotal.textContent}<br>
-    IVA: ${lblIVA.textContent}<br>
-    <strong>TOTAL: ${lblTotal.textContent}</strong><br>
-    ----------------------------------------<br>
-    MÉTODO: ${metodoPago.value.toUpperCase()}<br>
-    RECIBIDO: $${(metodoPago.value === "efectivo" ? recibido : total).toFixed(2)}<br>
-    CAMBIO: $${(metodoPago.value === "efectivo" ? (recibido - total) : 0).toFixed(2)}<br>
-    ----------------------------------------<br>
-    <strong>SI REQUIERE FACTURA, SOLICÍTELA AL MOMENTO DE SU COMPRA</strong><br>
-    ----------------------------------------<br>
-    <strong>GRACIAS POR SU COMPRA</strong><br>
-  </div>
-  `;
+// === IMPRIMIR TICKET 80MM CON DATOS FISCALES ===
+const logoURL = "logo_proveedora.webp";
 
-  const ventana = window.open("", "PRINT", "height=600,width=400");
-  ventana.document.write(`
-    <html><head><title>Ticket ${folio}</title></head>
-    <body onload="window.print(); window.close();">
-      ${contenidoTicket}
-    </body></html>
-  `);
-  ventana.document.close();
+const contenidoTicket = `
+<html>
+<head>
+<style>
+@page { size: 80mm auto; margin: 0; }
+body {
+  width: 80mm;
+  margin: 0;
+  padding: 6px;
+  font-family: monospace;
+  font-size: 11px;
+  text-align: center;
+}
+img {
+  width: 120px;
+  margin: 0 auto 6px auto;
+  display: block;
+}
+.linea { border-top: 1px dashed #000; margin: 4px 0; }
+.total { font-size: 13px; font-weight: bold; }
+</style>
+</head>
+<body>
+  <img src="${logoURL}">
+  <strong>PROVEEDORA DE DULCES Y DESECHABLES</strong><br>
+  <div style="font-size:11px;margin-top:2px;">
+    MADERO 690 SUR, CENTRO<br>
+    LINARES, NUEVO LEÓN, 67700<br>
+    RFC: PDD-031204-KL5<br>
+    TEL: (821) 2121085<br>
+    RÉGIMEN GENERAL DE LEY<br>
+    PERSONAS MORALES
+  </div>
+  <div class="linea"></div>
+  FOLIO: ${folio}<br>
+  FECHA: ${new Date().toLocaleString("es-MX")}<br>
+  USUARIO: ${document.getElementById("usuario").textContent}<br>
+  <div class="linea"></div>
+  ${carrito.map(x =>
+    `${x.codigo} | ${x.nombre}<br>${x.cantidad} x $${x.precio.toFixed(2)} = $${x.importe.toFixed(2)}`
+  ).join("<br>")}
+  <div class="linea"></div>
+  SUBTOTAL: ${lblSubtotal.textContent}<br>
+  IVA: ${lblIVA.textContent}<br>
+  <span class="total">TOTAL: ${lblTotal.textContent}</span><br>
+  <div class="linea"></div>
+  MÉTODO: ${metodoPago.value.toUpperCase()}<br>
+  RECIBIDO: $${(metodoPago.value === "efectivo" ? recibido : total).toFixed(2)}<br>
+  CAMBIO: $${(metodoPago.value === "efectivo" ? (recibido - total) : 0).toFixed(2)}<br>
+  <div class="linea"></div>
+  <strong>SI REQUIERE FACTURA, SOLICÍTELA AL MOMENTO DE SU COMPRA</strong><br>
+  <div class="linea"></div>
+  <strong>GRACIAS POR SU COMPRA</strong><br><br>
+</body>
+</html>
+`;
+
+const ventana = window.open("", "PRINT", "height=600,width=400");
+ventana.document.write(contenidoTicket);
+ventana.document.close();
+ventana.focus();
+ventana.print();
+ventana.close();
 
   modalCobro.style.display = "none";
   carrito = [];
